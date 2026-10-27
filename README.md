@@ -1,5 +1,9 @@
 # Machine Vision Studio [by trehubov]
 
+[Відкрити студію](https://machine-vision-studio.vercel.app/) · [GitHub](https://github.com/dsMagnatov/machine-vision-studio)
+
+![Machine Vision Studio — Particle Flow](preview.png)
+
 Самостійний інструмент, винесений з презентації Epsilon. Інтерфейс у стилі Grainrad; оригінальний рушій Vision із рухомими маркерами, координатами, лініями, колами, рамками, шумом та пікселізацією.
 
 Студія має дві вкладки: **Vision Tracking** і **Particle Flow**. Вони використовують спільний імпорт, кадрування та експорт; вибір джерела й параметри ефекту зберігаються окремо для кожного інструмента протягом поточного сеансу.
@@ -37,6 +41,12 @@ node preview.mjs --open
 ```
 
 Адреса: http://127.0.0.1:4180/. Залиште вікно сервера відкритим під час роботи. Потрібен Node.js 20.11 або новіший; файл запуску також уміє використовувати Node.js із локального встановлення Codex.
+
+## Публікація
+
+Production: **https://machine-vision-studio.vercel.app/**. Проєкт Vercel зв’язаний із цим GitHub-репозиторієм: push у `main` публікує нову версію. Налаштування збережені у `vercel.json`: Application Preset — Other, Output Directory — `dist`, без встановлення залежностей та кроку збірки. Змінні середовища не потрібні.
+
+Перевірки: `npm test` (30 тестів).
 
 ## Робота
 
