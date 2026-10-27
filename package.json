@@ -1,0 +1,12 @@
+{
+  "name": "machine-vision-studio",
+  "version": "1.6.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node preview.mjs --open",
+    "dev": "node preview.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": { "node": ">=20.11" }
+}
