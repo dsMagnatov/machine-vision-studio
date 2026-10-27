@@ -78,7 +78,7 @@ function renderUI() {
   ui.render({
     sources: [...sources.values()].map(({ id, name, kind, width, height, thumbnail, media }) => ({ id, name, kind, width, height, thumbnail, duration: kind === 'video' ? media.duration : 0 })),
     selected: selectedID, tool: activeTool,
-    depthState: source?.particleConfig.depthMode==='extrude'?'Solid extrusion · ready':source?.depthMap?.model==='Sphere'?'3D sphere · ready':source?.depthState || 'AI depth · waiting for a picture', depthError: source?.particleConfig.depthMode!=='extrude' && Boolean(source?.depthError),
+    depthState: source?.particleConfig.depthMode==='extrude'?'Extruded flow · ready':source?.depthMap?.model==='Sphere'?'3D sphere · ready':source?.depthState || 'AI depth · waiting for a picture', depthError: source?.particleConfig.depthMode!=='extrude' && Boolean(source?.depthError),
     ready: Boolean(source), loading, exporting, zoneEditing,
     config: source ? activeConfig(source) : activeTool === 'particles' ? particleDefaults() : normalize(BASE_CONFIG),
     framing: source?.framing || emptyFraming(), output,

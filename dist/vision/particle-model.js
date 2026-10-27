@@ -7,7 +7,7 @@ export const PARTICLE_GROUPS = [
   { id: 'cloud', label: 'Point cloud', open: true, controls: [
     select('density', 'Particles', [['32768','32,768'],['65536','65,536'],['131072','131,072'],['262144','262,144'],['524288','524,288']], '524288'),
     range('pointSize', 'Point size', .4, 3, .1, 1.1, 'px'), range('relief', 'Depth', 0, 2, .05, 1.1),
-    select('depthMode', 'Depth geometry', [['extrude','Solid extrusion'],['volume','AI volume'],['surface','AI surface']], 'extrude'),
+    select('depthMode', 'Depth geometry', [['extrude','Extruded flow'],['volume','AI volume'],['surface','AI surface']], 'extrude'),
     range('depthStretch', 'Depth stretch', .25, 3, .05, 1, '×'), range('cloudThickness', 'Interior fill', 0, .5, .01, .07),
     range('depthSmoothing', 'Depth smoothing', 0, 1, .05, .65), range('saturation', 'Image saturation', 0, 2, .05, 1),
     range('exposure', 'Exposure', .3, 3, .05, 1), range('contrast', 'Contrast', .2, 3, .05, 1),
@@ -28,6 +28,10 @@ export const PARTICLE_GROUPS = [
   ] },
   { id: 'drift-line', label: 'Drift line', controls: [
     range('lineAngle', 'Angle', -180, 180, 1, 0, '°'), range('linePosition', 'Position', -1, 1, .02, 0), toggle('flipSide', 'Flip fading side', false),
+  ] },
+  { id: 'rear-flow', label: 'Rear flow', controls: [
+    range('rearEmission', 'Rear emission', 0, 1, .05, .8), range('rearLength', 'Tail length', 0, 3, .05, .8),
+    range('rearSpread', 'Tail spread', 0, 1.5, .05, .5), range('rearSpeed', 'Tail speed', .1, 2, .05, .6),
   ] },
   { id: 'particle-draw', label: 'Drawing layers', controls: [
     toggle('trackers', 'Trackers', true), select('trackerCount', 'Tracker density', [['8','Sparse'],['24','Dense']], '8'),
@@ -62,7 +66,7 @@ export function normalizeParticles(input = {}) {
 }
 export function sourceSeed(id) { let hash = 2166136261; for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619); return (hash >>> 0) % 65521; }
 export const gatheringDuration = transitionDuration;
-export const FLOW_PARAMETERS = ['drift','driftSoftness','driftSpread','driftSpeed','turbulence','relief','depthStretch','cloudThickness','depthSmoothing','splash','gather','transitionSoftness'];
+export const FLOW_PARAMETERS = ['drift','driftSoftness','driftSpread','driftSpeed','turbulence','relief','depthStretch','cloudThickness','depthSmoothing','splash','gather','transitionSoftness','rearEmission','rearLength','rearSpread','rearSpeed'];
 export function particleConfigAt(config,tween,time){
   if(!tween || !config.animate)return config;
   const mix=softer(0,1,(time-tween.start)/tween.duration);if(mix>=1)return config;

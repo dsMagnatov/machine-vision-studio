@@ -86,6 +86,7 @@ export class ParticleRenderer{
     this.uniform('uCloud',[c.relief,c.pointSize,c.exposure,c.scan?1:0]);this.uniform('uMotion',[c.drift,c.splash,c.gather,c.transitionSoftness??.8]);
     this.uniform('uDrift',[c.driftSoftness??.5,c.driftSpread??1,c.driftSpeed??.45,c.turbulence??.35]);
     this.uniform('uVolume',[c.depthStretch??1,c.cloudThickness??.07,c.depthSmoothing??.65,c.saturation??1]);
+    this.uniform('uRear',[c.rearEmission??.8,c.rearLength??.8,c.rearSpread??.5,c.rearSpeed??.6]);
     this.uniform('uGeometry',[c.depthMode==='surface'?2:c.depthMode==='volume'?1:0,0,0,0]);
     this.uniform('uEdges',[a.edges.width,a.edges.count,b.edges.width,b.edges.count]);this.uniform('uEdgePixels',[...a.edges.pixel,...b.edges.pixel]);
     const angle=c.lineAngle*Math.PI/180;this.uniform('uLine',[Math.cos(angle),Math.sin(angle),c.linePosition,c.flipSide?1:0]);

@@ -3,8 +3,29 @@ export const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a));return t*t*(3-2*t);};
 export const softer=(a,b,x)=>{const t=clamp((x-a)/(b-a));return t*t*t*(t*(t*6-15)+10);};
 export function particleHash(n){let x=(Math.max(0,n)+1)>>>0;x^=x>>>16;x=Math.imul(x,0x7feb352d);x^=x>>>15;x=Math.imul(x,0x846ca68b);x^=x>>>16;return(x&0x00ffffff)/16777216;}
 export const transitionDuration=c=>(1.6+2*(c.transitionSoftness??.8))/(.4+c.gather*.85);
-export const extrusionLength=c=>c.relief*(c.depthStretch??1)*1.2;
+export const FRONT_LAYER_END=.46,REAR_EMITTER_START=.78;
+export const extrusionLength=c=>c.relief*(c.depthStretch??1)*(c.depthMode==='extrude'?.72:1.2);
 export const cameraDistance=c=>3.2+(c.depthMode==='surface'?0:extrusionLength(c)*.5);
+export function particleLayer(id,c){
+  const kind=particleHash(id+101),emitter=c.depthMode!=='surface'&&kind>=REAR_EMITTER_START;
+  return{emitter,layer:c.depthMode==='surface'||kind<FRONT_LAYER_END?1:emitter?-.28*particleHash(id+109):1-2*particleHash(id+109)};
+}
+export function rearParticle(position,uv,id,c,time,layer=1){
+  const length=extrusionLength(c),amount=c.depthMode==='surface'?0:softer(0,.18,length),emitter=particleLayer(id,c).emitter;
+  if(!amount)return{...position,opacity:1,sideFlow:1,emitter:false};
+  if(emitter){
+    // Recycle only after fading to zero. Motion always runs along local -Z,
+    // before projection, so changing the camera cannot change the wind.
+    const age=(time*(.08+.18*(c.rearSpeed??.6))+particleHash(id+151))%1;
+    const birth=softer(0,.13,age),death=1-softer(.3,1,age);
+    const angle=particleHash(id+163)*Math.PI*2,radius=Math.sqrt(-2*Math.log(Math.max(.003,particleHash(id+167))));
+    const spread=length*(c.rearSpread??.5)*(.015+.18*age+.12*age*age),curl=Math.sin(uv.y*8+particleHash(id+173)*6.283+time*.4+age*3);
+    const opacity=.44*(c.rearEmission??.8)*birth*death*(.8+.2*particleHash(id+179));
+    return{x:position.x+amount*spread*(Math.cos(angle)*radius+curl*.3),y:position.y+amount*spread*(Math.sin(angle)*radius+Math.cos(curl+uv.x*9)*.3),z:position.z-amount*length*(.35+(c.rearLength??.8)*.9)*age,opacity:1+(opacity-1)*amount,sideFlow:1-amount,emitter:true};
+  }
+  const fade=softer(.5,1,(1-layer)*.5),grain=length*(c.rearSpread??.5)*fade*.12;
+  return{x:position.x+grain*Math.sin(id*1.37+time*.31),y:position.y+grain*Math.cos(id*2.19-time*.27),z:position.z-grain*(.5+.5*Math.sin(id*.73+time*.2)),opacity:1+(Math.pow(1-fade,1.6)-1)*amount,sideFlow:1,emitter:false};
+}
 export function cloudPosition(uv,depth,id,c,aspect,layer=1){
   if(c.depthMode!=='surface'){
     const half=extrusionLength(c)*.5*(c.depthMode==='volume'?Math.max(.025,depth):1);
@@ -20,7 +41,7 @@ function burstEnvelope(t,id,c){
   const outgoing=Math.max(.16,Math.min(.7,.55/(.6+c.splash)))*(.4+.6*softness);
   return softer(lag,Math.min(.8,lag+outgoing),t)*(1-softer(.36+softness*.16+lag*.4,1,t));
 }
-export function deformParticle(position,uv,id,c,time,{progress=0,burstStart=-100}={}){
+export function deformParticle(position,uv,id,c,time,{progress=0,burstStart=-100,sideFlow=1}={}){
   const hash=particleHash,angle=c.lineAngle*Math.PI/180,nx=Math.cos(angle),ny=Math.sin(angle);
   const feather=.025+(c.driftSoftness??.5)*.55,strength=clamp(c.drift/2);
   let side=smooth(-feather,feather,(uv.x-.5)*nx+(uv.y-.5)*ny-c.linePosition*.5);if(c.flipSide)side=1-side;
@@ -29,7 +50,7 @@ export function deformParticle(position,uv,id,c,time,{progress=0,burstStart=-100
   // with zero velocity and acceleration, including at the lifetime seam.
   const age=(time*(.035+.11*(c.driftSpeed??.45))+hash(id+41))%1;
   const back=Math.max(.2,Math.min(.65,.42/(.35+c.gather))),out=1-back;
-  const flight=softer(0,1,age<out?age/out:(1-age)/back),erosion=release*flight;
+  const flight=softer(0,1,age<out?age/out:(1-age)/back),erosion=release*flight*sideFlow;
   const distance=erosion*(c.driftSpread??1)*(.3+strength*1.9);
   const radius=Math.min(2.8,.25-Math.log(Math.max(.005,1-hash(id+51)))*.55),turbulence=c.turbulence??.35;
   const curl=Math.sin(uv.y*9+uv.x*5+time*.45+hash(id+52)*6.283);
@@ -55,24 +76,40 @@ float hash(float n){uint x=uint(max(0.0,n)+1.0);x^=x>>16;x*=0x7feb352du;x^=x>>15
 float softer(float a,float b,float x){float t=clamp((x-a)/(b-a),0.0,1.0);return t*t*t*(t*(t*6.0-15.0)+10.0);}
 vec3 cloudPosition(vec2 uv,float depth,float id,float layer){
  if(uGeometry.x<1.5){
-  float halfDepth=uCloud.x*uVolume.x*.6*(uGeometry.x>.5?max(.025,depth):1.0);
+  float halfDepth=uCloud.x*uVolume.x*(uGeometry.x<.5?.36:.6)*(uGeometry.x>.5?max(.025,depth):1.0);
   return vec3((uv.x-.5)*1.8*uSize.x/uSize.y,(.5-uv.y)*1.8,halfDepth*layer);
  }
  float raw=(depth-.5)*uCloud.x*1.6*uVolume.x;
  float z=2.2*raw/sqrt(4.84+raw*raw)+(hash(id+27.0)-.5)*uVolume.y*uCloud.x,ray=(3.2-z)/3.2;
  return vec3((uv.x-.5)*1.8*uSize.x/uSize.y*ray,(.5-uv.y)*1.8*ray,z);
 }
+float rearLength(){return uCloud.x*uVolume.x*(uGeometry.x<.5?.72:1.2);}
+float particleLayer(float id){float kind=hash(id+101.0);return uGeometry.x>1.5||kind<${FRONT_LAYER_END}?1.0:kind>=${REAR_EMITTER_START}?-.28*hash(id+109.0):1.0-2.0*hash(id+109.0);}
+vec4 rearParticle(vec3 pos,vec2 uv,float id,float layer){
+ float length=rearLength(),amount=uGeometry.x>1.5?0.0:softer(0.0,.18,length);if(amount<=0.0)return vec4(pos,1.0);
+ if(hash(id+101.0)>=${REAR_EMITTER_START}){
+  float age=fract(uTime*(.08+.18*uRear.w)+hash(id+151.0)),birth=softer(0.0,.13,age),death=1.0-softer(.3,1.0,age);
+  float angle=hash(id+163.0)*6.28318530718,radius=sqrt(-2.0*log(max(.003,hash(id+167.0))));
+  float spread=length*uRear.z*(.015+.18*age+.12*age*age),curl=sin(uv.y*8.0+hash(id+173.0)*6.283+uTime*.4+age*3.0);
+  pos.xy+=amount*spread*vec2(cos(angle)*radius+curl*.3,sin(angle)*radius+cos(curl+uv.x*9.0)*.3);
+  pos.z-=amount*length*(.35+uRear.y*.9)*age;
+  float opacity=.44*uRear.x*birth*death*(.8+.2*hash(id+179.0));return vec4(pos,mix(1.0,opacity,amount));
+ }
+ float fade=softer(.5,1.0,(1.0-layer)*.5),grain=length*uRear.z*fade*.12;
+ pos+=grain*vec3(sin(id*1.37+uTime*.31),cos(id*2.19-uTime*.27),-(.5+.5*sin(id*.73+uTime*.2)));
+ return vec4(pos,mix(1.0,pow(1.0-fade,1.6),amount));
+}
 float burstEnvelope(float t,float id){
  float softness=uMotion.w,lag=hash(id+81.0)*softness*.14;
  float outgoing=clamp(.55/(.6+uMotion.y),.16,.7)*(.4+.6*softness);
  return softer(lag,min(.8,lag+outgoing),t)*(1.0-softer(.36+softness*.16+lag*.4,1.0,t));
 }
-vec4 deformParticle(vec3 pos,vec2 uv,float id){
+vec4 deformParticle(vec3 pos,vec2 uv,float id,float sideFlow){
  float feather=.025+uDrift.x*.55,strength=clamp(uMotion.x/2.0,0.0,1.0);
  float side=smoothstep(-feather,feather,dot(uv-.5,uLine.xy)-uLine.z*.5);if(uLine.w>.5)side=1.0-side;
  float threshold=hash(id+39.0)*.72,release=softer(threshold,threshold+.28,side*strength);
  float age=fract(uTime*(.035+.11*uDrift.z)+hash(id+41.0)),back=clamp(.42/(.35+uMotion.z),.2,.65),outbound=1.0-back;
- float flight=softer(0.0,1.0,age<outbound?age/outbound:(1.0-age)/back),erosion=release*flight;
+ float flight=softer(0.0,1.0,age<outbound?age/outbound:(1.0-age)/back),erosion=release*flight*sideFlow;
  float distance=erosion*uDrift.y*(.3+strength*1.9);
  float radius=min(2.8,.25-log(max(.005,1.0-hash(id+51.0)))*.55);
  float curl=sin(uv.y*9.0+uv.x*5.0+uTime*.45+hash(id+52.0)*6.283);

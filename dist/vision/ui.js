@@ -246,7 +246,7 @@ export function createUI(onAction) {
       }else{
         input=element('select');for(const option of field.options){const node=element('option','',option.label);node.value=option.value;input.append(node);}input.addEventListener('change',()=>onAction('config',{key:field.key,value:input.value}));particleUpdates.push(()=>sync(input,view.config[field.key]));
       }
-      input.id=id;input.setAttribute('aria-label',`Particle ${field.label}`);wrap.append(input);body.append(wrap);particleUpdates.push(()=>{const disabled=!view.ready||field.key==='depthSmoothing'&&view.config.depthMode==='extrude';input.disabled=disabled;if(numeric)numeric.disabled=disabled;});
+      input.id=id;input.setAttribute('aria-label',`Particle ${field.label}`);wrap.append(input);body.append(wrap);particleUpdates.push(()=>{const disabled=!view.ready||field.key==='depthSmoothing'&&view.config.depthMode==='extrude'||group.id==='rear-flow'&&view.config.depthMode==='surface';input.disabled=disabled;if(numeric)numeric.disabled=disabled;});
     }
   }
   const exportSection = section(right, 'Export', true, 'export'); exportSection.parentElement.classList.add('export-panel');
