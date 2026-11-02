@@ -1,3 +1,6 @@
+import { FIELD_GROUPS } from './field-model.js';
+import { FieldRenderer } from './field-renderer.js';
+
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const mix = (a, b, t) => a + (b - a) * t;
 const TAU = Math.PI * 2;
@@ -12,10 +15,11 @@ const select = (key, label, options, value) => ({ key, label, type: 'select', op
 const text = (key, label, value = '') => ({ key, label, type: 'text', default: value });
 const color = (key, label, value) => ({ key, label, type: 'color', default: value });
 export const GROUPS = [
+  ...FIELD_GROUPS,
   { id: 'image', label: 'Image', open: true, controls: [range('imageOpacity', 'Image opacity', 0, 1, .01, 1, '%')] },
   { id: 'motion', label: 'Motion', open: true, controls: [toggle('animate', 'Animate', true), select('motion', 'Mode', [['scan', 'Scanning'], ['flow', 'Continuous motion'], ['both', 'Scan + motion']], 'both'), range('speed', 'Speed', .1, 3, .05, .8, '×'), range('movement', 'Movement', 0, 60, 1, 12, 'px'), range('trail', 'Scan trail', .05, 1, .01, .35, '%'), range('pulse', 'Size pulse', 0, 1, .01, .15, '%'), select('scanDirection', 'Scan direction', [['down', 'Top to bottom'], ['right', 'Left to right'], ['radial', 'From center']], 'down'), toggle('scanLine', 'Scan line', true)] },
   { id: 'pixelate', label: 'Pixelate', controls: [range('pixelSize', 'Pixel size', 2, 60, 2, 16, 'px'), range('zoneSize', 'Zone size', 20, 400, 10, 100, 'px'), toggle('zoneStroke', 'Zone outlines', true)] },
-  { id: 'detection', label: 'Detection', open: true, controls: [toggle('detection', 'Detection markers', true), select('detectionMode', 'Analysis', [['combined', 'Combined'], ['contrast', 'Contrast'], ['bright', 'Bright'], ['dark', 'Dark']], 'combined'), range('blockSize', 'Block size', 8, 64, 4, 16, 'px'), range('threshold', 'Threshold', 0, 80, 1, 24), range('maxCircles', 'Max markers', 5, 300, 5, 80), range('minDistance', 'Min distance', 10, 100, 5, 50, 'px')] },
+  { id: 'detection', label: 'Detection', open: true, controls: [toggle('detection', 'Detection markers', true), select('detectionPlacement', 'Marker placement', [['auto', 'Auto'], ['features', 'Features only'], ['scattered', 'Scattered field']], 'auto'), select('detectionMode', 'Analysis', [['combined', 'Combined'], ['contrast', 'Contrast'], ['bright', 'Bright'], ['dark', 'Dark']], 'combined'), range('blockSize', 'Block size', 8, 64, 4, 16, 'px'), range('threshold', 'Threshold', 0, 80, 1, 24), range('maxCircles', 'Max markers', 5, 300, 5, 80), range('minDistance', 'Min distance', 10, 100, 5, 50, 'px')] },
   { id: 'shapes', label: 'Shapes', controls: [select('shape', 'Shape', [['circle', 'Circle'], ['square', 'Square']], 'circle'), range('minRadius', 'Min radius', 2, 30, 1, 4, 'px'), range('maxRadius', 'Max radius', 10, 120, 2, 24, 'px'), range('stroke', 'Stroke', .3, 3, .1, 1, 'px'), range('sizeSeed', 'Size seed', 1, 999, 1, 42), toggle('labels', 'Coordinate labels', false), range('labelSize', 'Label size', 4, 30, 1, 8, 'px'), toggle('animateLabels', 'Animate numbers', true), range('labelRate', 'Number update rate', 2, 20, 1, 8, 'Hz'), range('overlayOpacity', 'Overlay opacity', 0, 1, .01, .7, '%')] },
   { id: 'connections', label: 'Connections', controls: [toggle('connections', 'Connecting lines', true), range('maxDistance', 'Max distance', 0, 400, 10, 150, 'px'), range('lineWeight', 'Line weight', .2, 2, .1, .8, 'px')] },
   { id: 'chain', label: 'Circle chain', controls: [toggle('chainEnabled', 'Circle chain', false), range('count', 'Count', 3, 15, 1, 11), range('angle', 'Angle', 0, 180, 1, 45, '°'), range('baseRadius', 'Base radius', 30, 400, 5, 250, 'px'), range('sizeRatio', 'Size ratio', .5, 1.2, .01, .79, '×'), range('chainX', 'Center X', 0, 1, .01, .5, '%'), range('chainY', 'Center Y', 0, 1, .01, .5, '%'), toggle('intersections', 'Intersection markers', true), range('markerSize', 'Marker size', 2, 15, .5, 5, 'px')] },
@@ -64,8 +68,19 @@ export function detectFeatures(image, width, height, config) {
     const contrast = clamp((Math.max(l, l0, l1, l2, l3) - Math.min(l, l0, l1, l2, l3)) * 4);
     const chroma = (Math.max(data[index], data[index + 1], data[index + 2]) - Math.min(data[index], data[index + 1], data[index + 2])) / 255;
     const score = config.detectionMode === 'bright' ? l : config.detectionMode === 'dark' ? 1 - l : config.detectionMode === 'contrast' ? contrast : clamp(contrast * .55 + l * .3 + chroma * .25);
-    if (score * 100 < config.threshold || data[index + 3] < 12) continue;
+    if (config.detectionPlacement === 'scattered' || score * 100 < config.threshold || data[index + 3] < 12) continue;
     candidates.push({ x: x / sw, y: y / sh, score, cell: y * sw + x });
+  }
+  // A flat image has no detectable features. Auto placement still provides the
+  // decorative marker layer; Features only retains a strict analysis mode.
+  if (config.detectionPlacement === 'scattered' || !candidates.length && config.detectionPlacement !== 'features') {
+    for (let y = step; y < sh - step; y += step) for (let x = step; x < sw - step; x += step) {
+      const dx = Math.round((hash(x, y, config.sizeSeed + 1) - .5) * step * .7);
+      const dy = Math.round((hash(x, y, config.sizeSeed + 2) - .5) * step * .7);
+      const px = clamp(x + dx, 0, sw - 1), py = clamp(y + dy, 0, sh - 1);
+      if (data[(py * sw + px) * 4 + 3] < 12) continue;
+      candidates.push({ x: px / sw, y: py / sh, score: .4 + hash(x, y, config.sizeSeed) * .5, cell: y * sw + x, synthetic: true });
+    }
   }
   candidates.sort((a, b) => (b.score + hash(b.cell) * .015) - (a.score + hash(a.cell) * .015));
   const selected = [], distance = config.minDistance * unit;
@@ -123,6 +138,7 @@ export class VisionRenderer {
   constructor(canvas) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.source = makeBuffer(); this.analysis = makeBuffer(); this.pixel = makeBuffer(); this.grain = makeBuffer();
+    this.field = new FieldRenderer();
     this.features = []; this.labelStates = new Map(); this.analysisKey = ''; this.lastAnalysis = -Infinity; this.frameVersion = 0;
   }
   render(media, config, width, height, time, { dynamic = false, version = 0, textureMedia = null, fit = 'cover', position = '50% 50%', zoom = 1, clock = time } = {}) {
@@ -136,7 +152,7 @@ export class VisionRenderer {
       if (!cover(this.source.ctx, media, w, h, fit, position, zoom)) return false;
       this.frameVersion++; this.media = media; this.version = version;
     }
-    const key = [w, h, version, c.blockSize, c.threshold, c.maxCircles, c.minDistance, c.detectionMode, c.minRadius, c.maxRadius, c.sizeSeed].join('|');
+    const key = [w, h, version, c.blockSize, c.threshold, c.maxCircles, c.minDistance, c.detectionMode, c.detectionPlacement, c.minRadius, c.maxRadius, c.sizeSeed].join('|');
     if (c.detection && (this.analysisKey !== key || dynamic && clock - this.lastAnalysis >= .2)) {
       const ratio = Math.min(1, 480 / w, 480 / h), aw = Math.max(2, Math.round(w * ratio)), ah = Math.max(2, Math.round(h * ratio));
       resize(this.analysis.canvas, aw, ah); this.analysis.ctx.clearRect(0, 0, aw, ah); this.analysis.ctx.drawImage(this.source.canvas, 0, 0, aw, ah);
@@ -165,6 +181,7 @@ export class VisionRenderer {
     const phase = (time * c.speed / 8) % 1;
     this.drawZones(c, w, h, unit, time, flow);
     this.drawTexture(c, w, h, time, textureMedia);
+    const fieldCount = this.field.draw(ctx, this.source.canvas, c, w, h, time, this.frameVersion);
     const points = c.detection ? this.features.map(point => {
       const smooth = clamp((clock - this.lastAnalysis) / .2), angle = point.id * .618;
       let x = mix(point.fromX, point.x, smooth) * w, y = mix(point.fromY, point.y, smooth) * h;
@@ -195,6 +212,9 @@ export class VisionRenderer {
     this.canvas.dataset.ready = 'true'; this.canvas.dataset.markers = String(points.length); this.canvas.dataset.zones = String(c.zones.length);
     this.canvas.dataset.motion = c.animate ? c.motion : 'still'; this.canvas.dataset.phase = phase.toFixed(4); this.canvas.dataset.analysis = c.detectionMode;
     this.canvas.dataset.readout = readoutExample; this.canvas.dataset.numberMotion = c.labels && c.animateLabels && c.animate ? 'rolling' : 'still';
+    this.canvas.dataset.markerPlacement = points.some(p => p.synthetic) ? 'scattered' : 'features';
+    this.canvas.dataset.fieldElements = String(fieldCount); this.canvas.dataset.fieldShape = c.fieldShape;
+    this.canvas.dataset.fieldTime = (c.fieldAnimate ? time : 0).toFixed(4);
     return true;
   }
   drawReadout(point, c, width, height, unit, time) {
@@ -294,5 +314,5 @@ export class VisionRenderer {
     }
     ctx.restore();
   }
-  destroy() { for (const item of [this.source, this.analysis, this.pixel, this.grain]) item.canvas.width = item.canvas.height = 1; this.features = []; this.labelStates.clear(); }
+  destroy() { for (const item of [this.source, this.analysis, this.pixel, this.grain]) item.canvas.width = item.canvas.height = 1; this.field.destroy(); this.features = []; this.labelStates.clear(); }
 }

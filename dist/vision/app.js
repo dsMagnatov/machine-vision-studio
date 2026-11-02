@@ -10,6 +10,7 @@ import { ParticleRenderer } from './particle-engine.js';
 import { particleDefaults, normalizeParticles, sourceSeed, particlePair, particleConfigAt, FLOW_PARAMETERS } from './particle-model.js';
 import { DepthEstimator } from './depth-model.js';
 import { loadStarterMedia } from './starter-media.js';
+import { FIELD_KEYS, fieldIsAnimated, fieldPreset } from './field-model.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const sources = new Map();
@@ -123,6 +124,7 @@ function addSource(data, { select = true } = {}) {
     framing: emptyFraming(), phase: 0, version: 1, playingWanted: true, lastMediaTime: -1,
   };
   if (reducedMotion) source.config.animate = false;
+  if (reducedMotion) source.config.fieldAnimate = false;
   if (reducedMotion) source.particleConfig.animate = false;
   sources.set(source.id, source);
   if (source.kind === 'video') {
@@ -161,11 +163,16 @@ function setConfig(patch) {
     if(source.particleConfig.animate && FLOW_PARAMETERS.some(key=>key in patch))source.particleTween={from:{...from},start:particleClock,duration:.18+source.particleConfig.transitionSoftness*.6};
     else if(!source.particleConfig.animate)source.particleTween=null;
   }
-  else {source.config = normalize({ ...source.config, ...patch });source.version++;}
+  else {
+    const preset = 'fieldPreset' in patch ? fieldPreset(patch.fieldPreset) : null;
+    if (preset) patch = { ...patch, ...preset };
+    else if (!('fieldPreset' in patch) && Object.keys(patch).some(key => FIELD_KEYS.has(key) && !['fieldEnabled','fieldAnimate'].includes(key))) patch = { ...patch, fieldPreset: 'custom' };
+    source.config = normalize({ ...source.config, ...patch }); source.version++;
+  }
   dirty = true; syncPlayback(); renderUI();
 }
 function applyPreset(id) {
-  const config = clone(BASE_CONFIG);
+  const config = normalize(clone(BASE_CONFIG));
   if (id === 'detection') Object.assign(config, { chainEnabled: false, frameEnabled: false, texture: 'none' });
   if (id === 'geometry') Object.assign(config, { detection: false, connections: false, frameEnabled: true, chainEnabled: true, texture: 'none' });
   if (id === 'minimal') Object.assign(config, { chainEnabled: false, frameEnabled: false, texture: 'none', connections: false, maxCircles: 35, minRadius: 5, maxRadius: 16, labels: false, stroke: .8, overlayOpacity: .85 });
@@ -298,7 +305,7 @@ function action(type, value) {
   }
   if (type === 'config') setConfig({ [value.key]: value.value, enabled: true });
   else if (type === 'enabled') setConfig({ enabled: value });
-  else if (type === 'reset') { source.phase = 0; zoneEditing = false; if(activeTool==='particles'){burstStart=lightStart=-100;particleAnchor=particleClock;particleTransition=null;setConfig({...particleDefaults(),...source.particleOverrides});}else setConfig(clone(BASE_CONFIG));ui.status('Base effect restored.'); }
+  else if (type === 'reset') { source.phase = 0; zoneEditing = false; if(activeTool==='particles'){burstStart=lightStart=-100;particleAnchor=particleClock;particleTransition=null;setConfig({...particleDefaults(),...source.particleOverrides});}else setConfig(normalize(BASE_CONFIG));ui.status('Base effect restored.'); }
   else if (type === 'preset') applyPreset(value);
   else if (type === 'framing') {
     if (RATIOS.some(item => item[0] === value.ratio)) source.framing.ratio = value.ratio;
@@ -325,10 +332,11 @@ function tick(now) {
     for(const item of items)ensureDepth(item);
     if(source.kind==='video'&&!source.depthPending&&!source.depthError&&now-(source.depthAttempt||0)>800&&Math.abs(source.media.currentTime-(source.depthMediaTime||0))>.25)ensureDepth(source,true);
   }
-  if (config.animate && config.enabled) {if(activeTool==='particles')particleClock+=elapsed;else source.phase+=elapsed;}
+  const moving = config.animate || activeTool === 'vision' && fieldIsAnimated(config);
+  if (moving && config.enabled) {if(activeTool==='particles')particleClock+=elapsed;else source.phase+=elapsed;}
   const texture = activeTool==='vision'?sources.get(source.config.texture):null;
   const videoChanged = source.kind === 'video' && source.media.currentTime !== source.lastMediaTime;
-  const animated = config.enabled && config.animate || texture?.kind === 'video' && !texture.media.paused;
+  const animated = config.enabled && moving || texture?.kind === 'video' && !texture.media.paused;
   if (!dirty && !videoChanged && !animated || now - lastPaint < 1000 / (activeTool==='particles'?60:24)) return;
   try {
     let size = previewSize(encodingSize(outputSize(source, source.framing, output.longEdge), output.format));

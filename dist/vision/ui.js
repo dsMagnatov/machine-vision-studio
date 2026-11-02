@@ -95,6 +95,7 @@ export function createUI(onAction) {
     ['vision', 'Vision', 'enabled'], ['detection', 'Detection markers', 'detection'],
     ['connections', 'Connecting lines', 'connections'], ['chain', 'Circle chain', 'chainEnabled'],
     ['frame', 'Crosshair frame', 'frameEnabled'], ['pixelate', 'Pixelate zones', 'zones'],
+    ['field', 'ASCII / Raster', 'fieldEnabled'],
     ['texture', 'Texture / grain', 'texture'],
   ];
   for (const [id, title, key] of effects) {
@@ -155,10 +156,13 @@ export function createUI(onAction) {
   const settingsHeader = element('header', 'settings-header'); settingsHeader.append(element('span', '', '− Settings'), button('Reset', 'Reset effect to base settings', () => onAction('reset'), 'quiet-button')); right.append(settingsHeader);
   const settings = element('form', 'settings-scroll'); settings.addEventListener('submit', event => event.preventDefault()); right.append(settings);
   let zoneButton, undoZone, clearZone, zoneCount;
-  const groupOrder = ['detection', 'shapes', 'motion', 'connections', 'chain', 'frame', 'pixelate', 'text', 'texture', 'image'];
+  const groupOrder = ['detection', 'shapes', 'field', 'field-layout', 'field-motion', 'motion', 'connections', 'chain', 'frame', 'pixelate', 'text', 'texture', 'image'];
   for (const group of groupOrder.map(id => GROUPS.find(group => group.id === id))) {
     const body = section(settings, group.id === 'image' ? 'Image' : group.label, group.id === 'detection', group.id);
     body.parentElement.dataset.tool='vision';
+    if (group.id === 'detection') body.append(element('p', 'control-hint', 'Auto adds decorative markers when no image features pass the threshold. Features only keeps strict detection.'));
+    if (group.id === 'field') body.append(element('p', 'control-hint', 'Combine with tracking or use alone. Presets affect only this layer. Size and spacing scale with the canvas.'));
+    if (group.id === 'field-motion') body.append(element('p', 'control-hint', '0° → right · 90° ↓ down · 180° ← left · 270° ↑ up. Animation is independent of tracking motion.'));
     if (group.id === 'texture') {
       const texture = select('Texture source', [['none', 'None'], ['grain', 'Procedural grain']], value => onAction('config', { key: 'texture', value }), 'texture-source'); body.append(texture.wrap);
       let textureKey = '';
@@ -171,7 +175,7 @@ export function createUI(onAction) {
         sync(texture.input, view.config.texture); texture.input.disabled = !view.ready;
       });
     }
-    for (const field of group.controls.filter(field => field.type !== 'color')) {
+    for (const field of group.controls.filter(field => field.type !== 'color' || group.id === 'field')) {
       const wrap = element('div', `control control-${field.type}`), id = `vision-${field.key}`;
       const label = element('label', '', field.label); label.htmlFor = id; wrap.append(label);
       let input, numeric;
@@ -192,6 +196,14 @@ export function createUI(onAction) {
         input = element('select');
         for (const option of field.options) { const item = element('option', '', option.label); item.value = option.value; input.append(item); }
         input.addEventListener('change', () => onAction('config', { key: field.key, value: input.value })); updates.push(() => sync(input, view.config[field.key]));
+      } else if (field.type === 'color') {
+        input = element('input', 'color-swatch'); input.type = 'color';
+        const hex = element('input', 'color-hex'); hex.type = 'text'; hex.maxLength = 7; hex.spellcheck = false; hex.setAttribute('aria-label', `${field.label} hex`);
+        const commit = value => onAction('config', { key: field.key, value });
+        for (const event of ['input','change']) input.addEventListener(event, () => commit(input.value));
+        hex.addEventListener('input', () => { if (/^#[0-9a-f]{6}$/i.test(hex.value)) commit(hex.value); });
+        hex.addEventListener('blur', () => { hex.value = view.config[field.key]; }); wrap.append(hex);
+        updates.push(() => { sync(input, view.config[field.key]); sync(hex, view.config[field.key]); hex.disabled = !view.ready || !view.config.fieldEnabled || view.config.fieldSourceColor; });
       } else {
         input = element('input'); input.type = 'text'; input.maxLength = 96;
         input.addEventListener('input', () => onAction('config', { key: field.key, value: input.value })); updates.push(() => sync(input, view.config[field.key]));
@@ -207,10 +219,17 @@ export function createUI(onAction) {
         if (['frameSize','dash','frameStroke','starSize','starPoints'].includes(field.key)) disabled ||= !c.frameEnabled;
         if (['textTL','textTR','textBL','textBR','textSize'].includes(field.key)) disabled ||= !c.frameText;
         if (['detectionMode','blockSize','threshold','maxCircles','minDistance','shape','minRadius','maxRadius','sizeSeed','labels','labelSize'].includes(field.key)) disabled ||= !c.detection || field.key === 'labelSize' && !c.labels;
+        if (field.key === 'detectionPlacement') disabled ||= !c.detection;
+        if (['detectionMode','threshold'].includes(field.key)) disabled ||= c.detectionPlacement === 'scattered';
         if (['animateLabels','labelRate'].includes(field.key)) disabled ||= !c.detection || !c.labels || field.key === 'labelRate' && (!c.animateLabels || !c.animate);
         if (['maxDistance','lineWeight'].includes(field.key)) disabled ||= !c.connections || !c.detection;
         if (['textureOpacity','textureBlend','textureAnimate'].includes(field.key)) disabled ||= c.texture === 'none';
         if (['grainSize','noiseSeed'].includes(field.key)) disabled ||= c.texture !== 'grain';
+        if (field.key.startsWith('field') && !['fieldEnabled','fieldPreset'].includes(field.key)) disabled ||= !c.fieldEnabled;
+        if (field.key === 'fieldCharacters' || field.key === 'fieldChangeRate') disabled ||= !['ascii','mixed'].includes(c.fieldShape);
+        if (field.key === 'fieldColor') disabled ||= c.fieldSourceColor;
+        if (['fieldThreshold','fieldSoftness','fieldContrast','fieldInvert'].includes(field.key)) disabled ||= c.fieldMask === 'uniform';
+        if (group.id === 'field-motion' && field.key !== 'fieldAnimate') disabled ||= !c.fieldAnimate;
         input.disabled = disabled; if (numeric) numeric.disabled = disabled;
       });
     }
