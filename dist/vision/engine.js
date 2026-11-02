@@ -1,4 +1,4 @@
-import { FIELD_GROUPS } from './field-model.js';
+import { FIELD_GROUPS, movementFromAngle } from './field-model.js';
 import { FieldRenderer } from './field-renderer.js';
 
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -50,6 +50,7 @@ export function normalize(input = {}) {
     if (field.type === 'color' && /^#[0-9a-f]{6}$/i.test(value || '')) result[field.key] = value;
   }
   result.enabled = input.enabled !== false;
+  if (input.fieldMovement === undefined && Number.isFinite(input.fieldDirection)) result.fieldMovement = movementFromAngle(input.fieldDirection);
   result.minRadius = Math.min(result.minRadius, result.maxRadius);
   if (typeof input.texture === 'string') result.texture = input.texture.slice(0, 200);
   if (Array.isArray(input.zones)) result.zones = input.zones.slice(0, 24).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)).map(p => ({ x: clamp(p.x), y: clamp(p.y) }));

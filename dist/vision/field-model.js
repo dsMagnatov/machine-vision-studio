@@ -2,12 +2,19 @@ const range = (key, label, min, max, step, value, unit = '') => ({ key, label, t
 const toggle = (key, label, value) => ({ key, label, type: 'toggle', default: value });
 const select = (key, label, options, value) => ({ key, label, type: 'select', options: options.map(([value, label]) => ({ value, label })), default: value });
 
+export const FIELD_DIRECTIONS = Object.freeze({ right: 0, 'down-right': 45, down: 90, 'down-left': 135, left: 180, 'up-left': 225, up: 270, 'up-right': 315 });
+export const fieldTravelAngle = c => FIELD_DIRECTIONS[c.fieldMovement] ?? c.fieldDirection;
+export function movementFromAngle(angle) {
+  const degrees = ((angle % 360) + 360) % 360;
+  return Object.keys(FIELD_DIRECTIONS).find(key => FIELD_DIRECTIONS[key] === degrees) || 'angle';
+}
+
 export const FIELD_PRESETS = [
   { id: 'code', label: 'ASCII drift', config: {} },
-  { id: 'binary', label: 'Binary rain', config: { fieldCharacters: '01', fieldSize: 14, fieldSpacing: 22, fieldAspect: 1.35, fieldSpeed: 80, fieldDirection: 90, fieldColor: '#a7dfba', fieldTrail: .65, fieldFlicker: .25, fieldChangeRate: 5 } },
-  { id: 'numbers', label: 'Telemetry', config: { fieldCharacters: '0123456789+-', fieldSize: 11, fieldSpacing: 30, fieldIntensity: .4, fieldSpeed: 15, fieldDirection: 180, fieldColor: '#b9d7ff', fieldChangeRate: 3 } },
-  { id: 'pixels', label: 'Pixel dissolve', config: { fieldShape: 'square', fieldSize: 4.5, fieldSpacing: 9, fieldIntensity: .94, fieldMask: 'clouds', fieldThreshold: .43, fieldSoftness: .28, fieldColor: '#f3b9a5', fieldOpacity: .95, fieldSpeed: 8, fieldDirection: 180, fieldTurbulence: 0, fieldFlicker: 0, fieldChangeRate: 0 } },
-  { id: 'raster', label: 'Image halftone', config: { fieldShape: 'square', fieldSize: 7, fieldSpacing: 10, fieldIntensity: 1, fieldMask: 'light', fieldThreshold: .25, fieldSoftness: .6, fieldSourceColor: true, fieldSpeed: 0, fieldTurbulence: 0, fieldFlicker: 0 } },
+  { id: 'binary', label: 'Binary rain', config: { fieldCharacters: '01', fieldSize: 14, fieldSpacing: 22, fieldAspect: 1.35, fieldMovement: 'down', fieldSpeed: 80, fieldDirection: 90, fieldColor: '#a7dfba', fieldTrail: .65, fieldFlicker: .25, fieldChangeRate: 5 } },
+  { id: 'numbers', label: 'Telemetry', config: { fieldCharacters: '0123456789+-', fieldSize: 11, fieldSpacing: 30, fieldIntensity: .4, fieldMovement: 'left', fieldSpeed: 15, fieldDirection: 180, fieldColor: '#b9d7ff', fieldChangeRate: 3 } },
+  { id: 'pixels', label: 'Pixel dissolve', config: { fieldShape: 'square', fieldSize: 4.5, fieldSpacing: 9, fieldIntensity: .94, fieldMask: 'clouds', fieldThreshold: .43, fieldSoftness: .28, fieldColor: '#f3b9a5', fieldOpacity: .95, fieldMovement: 'left', fieldSpeed: 8, fieldDirection: 180, fieldTurbulence: 0, fieldFlicker: 0, fieldChangeRate: 0 } },
+  { id: 'raster', label: 'Image halftone', config: { fieldShape: 'square', fieldSize: 7, fieldSpacing: 10, fieldIntensity: 1, fieldMask: 'light', fieldThreshold: .25, fieldSoftness: .6, fieldSourceColor: true, fieldMovement: 'stationary', fieldSpeed: 0, fieldTurbulence: 0, fieldFlicker: 0 } },
   { id: 'dots', label: 'Soft dot field', config: { fieldShape: 'dot', fieldSize: 4, fieldSpacing: 12, fieldMask: 'clouds', fieldSoftness: .55, fieldColor: '#fffbd9', fieldSpeed: 12, fieldTurbulence: .3 } },
   { id: 'mixed', label: 'Technical mix', config: { fieldShape: 'mixed', fieldCharacters: '+×.:01', fieldSize: 10, fieldSpacing: 26, fieldIntensity: .45, fieldColor: '#cccccc', fieldRotation: 45, fieldTurbulence: .5 } },
 ];
@@ -16,7 +23,9 @@ export const FIELD_GROUPS = [
     toggle('fieldEnabled', 'ASCII / Raster layer', false),
     select('fieldPreset', 'Layer preset', [['custom', 'Custom'], ...FIELD_PRESETS.map(p => [p.id, p.label])], 'custom'),
     select('fieldShape', 'Element', [['ascii', 'ASCII symbols'], ['square', 'Pixel squares'], ['dot', 'Dots'], ['cross', 'Crosses'], ['diamond', 'Diamonds'], ['mixed', 'Mixed elements']], 'ascii'),
+    select('fieldMovement', 'Movement', [['stationary', 'Stationary · swap symbols'], ['right', 'Right →'], ['left', 'Left ←'], ['up', 'Up ↑'], ['down', 'Down ↓'], ['up-right', 'Up-right ↗'], ['up-left', 'Up-left ↖'], ['down-right', 'Down-right ↘'], ['down-left', 'Down-left ↙'], ['angle', 'Custom angle']], 'right'),
     { key: 'fieldCharacters', label: 'Symbols', type: 'text', default: '01.:+*<>/[]{}' },
+    range('fieldChangeRate', 'Symbol change rate', 0, 20, .5, 2, 'Hz'),
     range('fieldSize', 'Element size', 2, 60, .5, 12, 'px'),
     range('fieldIntensity', 'Intensity / density', 0, 1, .01, .55, '%'),
     { key: 'fieldColor', label: 'Element color', type: 'color', default: '#d5d5d5' },
@@ -39,10 +48,9 @@ export const FIELD_GROUPS = [
   { id: 'field-motion', label: 'ASCII / Raster motion', controls: [
     toggle('fieldAnimate', 'Animate elements', true),
     range('fieldSpeed', 'Travel speed', 0, 300, 1, 30, 'px/s'),
-    range('fieldDirection', 'Travel direction', 0, 360, 1, 0, '°'),
+    range('fieldDirection', 'Custom angle', 0, 360, 1, 0, '°'),
     range('fieldTurbulence', 'Flow turbulence', 0, 2, .05, .15, '×'),
     range('fieldFlicker', 'Soft flicker', 0, 1, .01, .1, '%'),
-    range('fieldChangeRate', 'Symbol change rate', 0, 20, .5, 2, 'Hz'),
     range('fieldTrail', 'Motion trail', 0, 1, .01, 0, '%'),
     range('fieldPulse', 'Size pulse', 0, 1, .01, 0, '%'),
   ] },

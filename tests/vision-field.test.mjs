@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { detectFeatures, normalize } from '../dist/vision/engine.js';
 import { BASE_CONFIG } from '../dist/vision/preset.js';
-import { FIELD_PRESETS, fieldPreset, fieldIsAnimated } from '../dist/vision/field-model.js';
+import { FIELD_PRESETS, FIELD_DIRECTIONS, fieldPreset, fieldIsAnimated } from '../dist/vision/field-model.js';
 import { fieldGrid, fieldPosition, fieldElement, fieldMask } from '../dist/vision/field-renderer.js';
 
 function flat(value, alpha = 255) {
@@ -54,11 +54,37 @@ test('speed, direction, still toggle and independent animation drive predictable
   const c = normalize({ ...fieldPreset('code'), fieldTurbulence: 0, fieldJitter: 0, fieldSpeed: 30 }), grid = fieldGrid(c, 1920, 1080);
   const from = fieldPosition(4, 4, c, grid, 0), right = fieldPosition(4, 4, c, grid, 1);
   assert.ok(Math.abs(right.x - from.x - 30) < 1e-9); assert.equal(right.y, from.y);
-  const down = fieldPosition(4, 4, { ...c, fieldDirection: 90 }, grid, 1);
+  const down = fieldPosition(4, 4, { ...c, fieldMovement: 'down' }, grid, 1);
   assert.ok(Math.abs(down.y - from.y - 30) < 1e-9); assert.ok(Math.abs(down.x - from.x) < 1e-9);
   assert.deepEqual(fieldPosition(4, 4, { ...c, fieldAnimate: false }, grid, 50), from);
   assert.equal(fieldIsAnimated({ ...c, animate: false }), true);
   assert.equal(fieldIsAnimated({ ...c, fieldEnabled: false }), false);
+});
+test('eight direction choices and a custom angle move along the selected vector', () => {
+  const c = normalize({ ...fieldPreset('code'), fieldTurbulence: 0, fieldSpeed: 30 }), grid = fieldGrid(c, 1920, 1080);
+  const start = fieldPosition(20, 20, c, grid, 0);
+  for (const [fieldMovement, angle] of [...Object.entries(FIELD_DIRECTIONS), ['angle', 121]]) {
+    const point = fieldPosition(20, 20, { ...c, fieldMovement, fieldDirection: angle }, grid, 1);
+    assert.ok(Math.abs(point.x - start.x - Math.cos(angle * Math.PI / 180) * 30) < 1e-9, fieldMovement);
+    assert.ok(Math.abs(point.y - start.y - Math.sin(angle * Math.PI / 180) * 30) < 1e-9, fieldMovement);
+  }
+  assert.equal(normalize({ fieldDirection: 270 }).fieldMovement, 'up');
+  assert.equal(normalize({ fieldDirection: 121 }).fieldMovement, 'angle');
+});
+test('stationary mode swaps glyphs without moving cells or masks despite speed and turbulence', () => {
+  const c = normalize({ ...fieldPreset('binary'), fieldMovement: 'stationary', fieldCharacters: '0123456789', fieldSpeed: 300, fieldTurbulence: 2, fieldChangeRate: 10, fieldMask: 'clouds' });
+  const grid = fieldGrid(c, 1920, 1080), glyphs = new Set();
+  const start = fieldElement(20, 20, c, grid, 0, sample);
+  for (let i = 0; i < 50; i++) {
+    const time = i * .2, p = fieldElement(20, 20, c, grid, time, sample);
+    assert.equal(p.x, start.x); assert.equal(p.y, start.y);
+    assert.equal(fieldMask(c, p.x, p.y, sample, time), fieldMask(c, p.x, p.y, sample, 0));
+    glyphs.add(p.glyph);
+  }
+  assert.ok(glyphs.size > 5);
+  assert.equal(fieldIsAnimated(c), true);
+  const paused = { ...c, fieldAnimate: false };
+  assert.deepEqual(fieldElement(20, 20, paused, grid, 0, sample), fieldElement(20, 20, paused, grid, 10, sample));
 });
 test('density zero hides every shape, custom symbols and time-based changes stay deterministic', () => {
   const c = normalize({ ...fieldPreset('code'), fieldCharacters: 'Ж7', fieldIntensity: 1, fieldChangeRate: 10 }), grid = fieldGrid(c, 1920, 1080);

@@ -1,3 +1,5 @@
+import { fieldTravelAngle } from './field-model.js';
+
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const wrap = (x, span) => ((x % span) + span) % span;
 const smooth = (a, b, x) => { const t = clamp((x - a) / Math.max(.00001, b - a)); return t * t * (3 - 2 * t); };
@@ -16,7 +18,7 @@ export function fieldGrid(c, width, height) {
   return { unit, w, h, sx, sy, cols: Math.ceil(w / sx), rows: Math.ceil(h / sy), symbols: Array.from(c.fieldCharacters).filter(char => !/\s/u.test(char)) };
 }
 export function fieldPosition(col, row, c, grid, time) {
-  const t = c.fieldAnimate ? time : 0, angle = c.fieldDirection * Math.PI / 180;
+  const t = c.fieldAnimate && c.fieldMovement !== 'stationary' ? time : 0, angle = fieldTravelAngle(c) * Math.PI / 180;
   const phase = fieldHash(col, row, c.fieldSeed + 1) * Math.PI * 2;
   const x = (col + .5 + (fieldHash(col, row, c.fieldSeed + 2) - .5) * c.fieldJitter) * grid.sx;
   const y = (row + .5 + (fieldHash(col, row, c.fieldSeed + 3) - .5) * c.fieldJitter) * grid.sy;
@@ -30,7 +32,7 @@ export function fieldMask(c, x, y, sample, time) {
   if (c.fieldMask === 'uniform') return 1;
   let value;
   if (c.fieldMask === 'clouds') {
-    const t = c.fieldAnimate ? time * c.fieldSpeed / 120 : 0, offset = c.fieldSeed * .13;
+    const t = c.fieldAnimate && c.fieldMovement !== 'stationary' ? time * c.fieldSpeed / 120 : 0, offset = c.fieldSeed * .13;
     value = clamp(.5 + .27 * Math.sin(x * .006 + Math.sin(y * .008 + offset) * 1.7 + t * .12) + .23 * Math.cos(y * .012 - x * .003 + offset + t * .1));
   } else {
     const rgb = sample(x, y); if (rgb[3] < 12) return 0;
@@ -79,7 +81,7 @@ export class FieldRenderer {
       const index = (clamp(Math.floor(y / grid.h * sh), 0, sh - 1) * sw + clamp(Math.floor(x / grid.w * sw), 0, sw - 1)) * 4;
       return [data[index], data[index + 1], data[index + 2], data[index + 3]];
     };
-    const trail = c.fieldAnimate && c.fieldTrail > 0 ? 3 : 0;
+    const trail = c.fieldAnimate && c.fieldMovement !== 'stationary' && c.fieldTrail > 0 ? 3 : 0;
     let count = 0;
     ctx.save(); ctx.scale(grid.unit, grid.unit); ctx.globalCompositeOperation = c.fieldBlend;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `${c.fieldSize}px 'IBM Plex Mono', Consolas, monospace`;

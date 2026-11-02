@@ -161,8 +161,8 @@ export function createUI(onAction) {
     const body = section(settings, group.id === 'image' ? 'Image' : group.label, group.id === 'detection', group.id);
     body.parentElement.dataset.tool='vision';
     if (group.id === 'detection') body.append(element('p', 'control-hint', 'Auto adds decorative markers when no image features pass the threshold. Features only keeps strict detection.'));
-    if (group.id === 'field') body.append(element('p', 'control-hint', 'Combine with tracking or use alone. Presets affect only this layer. Size and spacing scale with the canvas.'));
-    if (group.id === 'field-motion') body.append(element('p', 'control-hint', '0° → right · 90° ↓ down · 180° ← left · 270° ↑ up. Animation is independent of tracking motion.'));
+    if (group.id === 'field') body.append(element('p', 'control-hint', 'Movement sets the travel direction. Stationary swaps symbols in place; Symbol change rate controls how often.'));
+    if (group.id === 'field-motion') body.append(element('p', 'control-hint', 'Choose Movement above. Custom angle: 0° right · 90° down. Animate elements also controls symbol changes.'));
     if (group.id === 'texture') {
       const texture = select('Texture source', [['none', 'None'], ['grain', 'Procedural grain']], value => onAction('config', { key: 'texture', value }), 'texture-source'); body.append(texture.wrap);
       let textureKey = '';
@@ -227,6 +227,9 @@ export function createUI(onAction) {
         if (['grainSize','noiseSeed'].includes(field.key)) disabled ||= c.texture !== 'grain';
         if (field.key.startsWith('field') && !['fieldEnabled','fieldPreset'].includes(field.key)) disabled ||= !c.fieldEnabled;
         if (field.key === 'fieldCharacters' || field.key === 'fieldChangeRate') disabled ||= !['ascii','mixed'].includes(c.fieldShape);
+        if (field.key === 'fieldChangeRate') disabled ||= !c.fieldAnimate;
+        if (field.key === 'fieldDirection') disabled ||= c.fieldMovement !== 'angle';
+        if (['fieldSpeed','fieldTurbulence','fieldTrail'].includes(field.key)) disabled ||= c.fieldMovement === 'stationary';
         if (field.key === 'fieldColor') disabled ||= c.fieldSourceColor;
         if (['fieldThreshold','fieldSoftness','fieldContrast','fieldInvert'].includes(field.key)) disabled ||= c.fieldMask === 'uniform';
         if (group.id === 'field-motion' && field.key !== 'fieldAnimate') disabled ||= !c.fieldAnimate;
